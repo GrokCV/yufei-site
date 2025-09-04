@@ -1,13 +1,13 @@
 ---
 # Display name
-title: 吳健雄
+title: 宋雨菲
 
 # Name pronunciation (optional)
-name_pronunciation: Chien Shiung Wu
+name_pronunciation: Yu Fei Song
 
 # Full name (for SEO)
-first_name: Shiung Wu
-last_name: Chien
+first_name: Song
+last_name: Yu Fei
 
 # Pronouns (optional)
 pronouns: she/her
