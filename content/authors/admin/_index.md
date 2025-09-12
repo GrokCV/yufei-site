@@ -186,4 +186,4 @@ awards:
 
 ## About Me
 
-Chien Shiung Wu is a professor of artificial intelligence at the Stanford AI Lab. Her research interests include distributed robotics, mobile computing and programmable matter. She leads the Robotic Neurobiology group, which develops self-reconfiguring robots, systems of self-organizing robots, and mobile sensor networks.
+Yufei Song (宋雨菲) is currently an undergraduate student majoring in Electronic Information Engineering at Henan University of Technology (HAUT), China. Her main research direction is the Neural Networks, Image Segmentation, Point Supervision and Infrared Simulated Small Target Detection. For more detailed information about her research, publications, and projects, please visit her personal academic website at <https://yufei.grokcv.ai/>.
