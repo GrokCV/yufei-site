@@ -50,9 +50,9 @@ profiles:
     url: https://orcid.org/
 
 interests:
-  - Artificial Intelligence
-  - Computational Linguistics
-  - Information Retrieval
+  - Image Segmentation
+  - Point Supervision
+  - Infrared Simulated Small Target Detection
 
 education:
   - area: PhD Artificial Intelligence
