@@ -42,7 +42,7 @@
 >
 > [ 无锚框目标检测算法（Anchor-free Methods）](https://xcn4rqyces3k.feishu.cn/docx/WO0ud57u4o4blvxyE9vcPs9JnEc)
 
-![](images/Luban_17572368146268c73a9d8-befd-4512-b94c-4b1160c2ae86.jpg=100x)
+![](images/Luban_17572368146268c73a9d8-befd-4512-b94c-4b1160c2ae86.jpg)
 ***
 
 **Q1：标签分配的初衷是什么？**
