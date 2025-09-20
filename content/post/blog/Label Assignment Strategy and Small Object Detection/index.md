@@ -43,6 +43,7 @@
 > [ 无锚框目标检测算法（Anchor-free Methods）](https://xcn4rqyces3k.feishu.cn/docx/WO0ud57u4o4blvxyE9vcPs9JnEc)
 
 ![](images/Luban_17572368146268c73a9d8-befd-4512-b94c-4b1160c2ae86.jpg)
+
 ***
 
 **Q1：标签分配的初衷是什么？**
@@ -117,23 +118,6 @@
 
 **标签分配可以从多种角度分类（本文主要探讨基础静态标签分配）**
 
-```plain&#x20;text
-标签分配策略
-├── 按标签类型分类
-│   ├── 硬标签分配
-│   │   ├── 非负即正
-│   │   ├── 静态（固定阈值：FCOS、R-CNN）
-│   │   └── 动态（阈值变化：ATSS、PAA、OTA）
-│   ├── 软标签分配
-│   │   ├── 给权重/分数，非0或1
-│   │   ├── 动态调整权重
-│   │   └── 例子：GFL、VFL、TOOD
-│   └── 可同时使用（硬→候选正样本，软→权重调整）
-├── 按是否用预测结果分类
-│   ├── 基于先验（只用固定信息，训练中不变）
-│   └── 基于预测（结合当前预测，训练中变化）
-```
-
 接下来我会分别从（ anchor-based 与 anchor-free ）列举。
 
 由于 CNN 的平移等变性，通常学习相对坐标，既然是相对坐标，就需要一个“零点”。
@@ -184,83 +168,6 @@ dense prediction 的输出结果数远多于目标数，故而需要研究目标
 
 **Anchor 标签分配的代码如下：**
 
-```plain&#x20;text
-def get_batch_anchors_annotations(self, batch_anchors, annotations):
-        """
-        为每个锚点分配一个对应的真实目标框和类别标签
-        标签规则：
-        - gt_class = -1：该锚点不参与分类和回归损失计算
-        - gt_class = 0：背景类锚点，只参与分类损失
-        - gt_class > 0：目标类锚点，参与分类和回归损失（类别号从1开始）
-        """
-        device = annotations.device  # 获取数据所在设备（CPU/GPU）
-        assert batch_anchors.shape[0] == annotations.shape[0]  # 确保batch大小一致
-        one_image_anchor_nums = batch_anchors.shape[1]  # 每张图片的锚点数量
-
-        batch_anchors_annotations = []  # 存储整个batch的分配结果
-        for one_image_anchors, one_image_annotations in zip(
-                batch_anchors, annotations):
-            # 过滤掉类别为-1的标注（无效标注）
-            one_image_annotations = one_image_annotations[
-                one_image_annotations[:, 4] >= 0]
-
-            # 如果该图片没有有效标注
-            if one_image_annotations.shape[0] == 0:
-                # 所有锚点都标记为-1（不参与损失计算）
-                one_image_anchor_annotations = torch.ones(
-                    [one_image_anchor_nums, 5], device=device) * (-1)
-            else:
-                # 提取真实框坐标和类别
-                one_image_gt_bboxes = one_image_annotations[:, 0:4]
-                one_image_gt_class = one_image_annotations[:, 4]
-
-                # 计算当前图片所有锚点与所有真实框的IoU
-                one_image_ious = self.compute_ious_for_one_image(
-                    one_image_anchors, one_image_gt_bboxes)
-
-                # 对每个锚点，找到IoU最大的真实框
-                overlap, indices = one_image_ious.max(axis=1)
-
-                # 根据最大IoU对应的索引，为每个锚点分配真实框
-                per_image_anchors_gt_bboxes = one_image_gt_bboxes[indices]
-
-                # 将真实框转换成相对于锚点的回归目标(tx, ty, tw, th)
-                one_image_anchors_snaped_boxes = self.snap_annotations_as_tx_ty_tw_th(
-                    per_image_anchors_gt_bboxes, one_image_anchors)
-
-                # 初始化所有锚点的类别为-1
-                one_image_anchors_gt_class = (torch.ones_like(overlap) *
-                                              -1).to(device)
-
-                # IoU < 0.4的锚点标记为背景类（0）
-                one_image_anchors_gt_class[overlap < 0.4] = 0
-
-                # IoU >= 0.5的锚点标记为对应真实框的类别（+1是因为类别从1开始）
-                one_image_anchors_gt_class[
-                    overlap >= 0.5] = one_image_gt_class[indices][overlap >= 0.5] + 1
-
-                # 增加一个维度，方便拼接
-                one_image_anchors_gt_class = one_image_anchors_gt_class.unsqueeze(
-                    -1)
-
-                # 将回归目标和类别拼接成 [tx, ty, tw, th, class]
-                one_image_anchor_annotations = torch.cat([
-                    one_image_anchors_snaped_boxes, one_image_anchors_gt_class
-                ],
-                                                         axis=1)
-
-            # 增加batch维度
-            one_image_anchor_annotations = one_image_anchor_annotations.unsqueeze(0)
-            batch_anchors_annotations.append(one_image_anchor_annotations)
-
-        # 将整个batch的结果拼接成 [batch_size, anchor_nums, 5]
-        batch_anchors_annotations = torch.cat(batch_anchors_annotations, axis=0)
-
-        # 返回形状: [batch_size, anchor_nums, 5]
-        return batch_anchors_annotations
-
-```
-
 ***
 
 **当“零点”是一个点的时候，就是 anchor-free 方法，“零点”即 anchor point，以 FCOS 为例：**
@@ -303,116 +210,6 @@ def get_batch_anchors_annotations(self, batch_anchors, annotations):
 
 **FCOS 标签分配的代码如下：**
 
-```plain&#x20;text
-def compute_targets_for_locations(self, locations, targets, object_sizes_of_interest):
-        # locations是所有层的特征点在输入图像的位置 (num_points_all_levels,2)
-        # object_sizes_of_interest是各特征点负责回归的目标尺度(bbox边长)范围 (num_points_all_levels,2)
-        # targets是一个批次中所有图像的标签 len=num_images(batch size) 其中每项是BoxList()实例
-
-        # 以下两个list，len=num_images
-        # 里面每项是一张图中所有特征点的类别标签 (num_points_all_levels,)
-        labels = []
-        # 里面每项是一张图中所有特征点的回归标签 (num_points_all_levels,4)
-        reg_targets = []
-        
-        # 各特征点的x,y坐标
-        # (num_points_all_levels,) (num_points_all_levels,)
-        xs, ys = locations[:, 0], locations[:, 1]
-
-        # 分别处理每张图像 i代表第i张图像
-        for im_i in range(len(targets)):
-            # 1. 利用每个特征点在输入图像的坐标与一张图中所有gt boxes的坐标初步计算出回归标签
-            
-            # 一张图的标签是一个BoxList实例
-            targets_per_im = targets[im_i]
-            # bbox坐标形式需要是x1y1x2y2
-            assert targets_per_im.mode == "xyxy"
-
-            # (num_objects_i,4) gt boxes
-            bboxes = targets_per_im.bbox
-            # (num_objects_i,) gt labels
-            labels_per_im = targets_per_im.get_field("labels")
-            # (num_objects_i,) 该图中所有gt boxes的面积
-            area = targets_per_im.area()
-
-            # 以下为两两交互计算 得到的shape均为(num_points_all_levels,num_objects_i)
-            # l = x - x1 每个特征点与每个bbox左边框的距离
-            l = xs[:, None] - bboxes[:, 0][None]
-            # t = y - y1 每个特征点与每个bbox上边框的距离
-            t = ys[:, None] - bboxes[:, 1][None]
-            # r = x2 - x 每个特征点与每个bbox右边框的距离
-            r = bboxes[:, 2][None] - xs[:, None]
-            # b = y2 - y 每个特征点与每个bbox下边框的距离
-            b = bboxes[:, 3][None] - ys[:, None]
-            # (num_points_all_levels,num_objects_i,4) 一张图片中所有特征点的回归标签
-            reg_targets_per_im = torch.stack([l, t, r, b], dim=2)
-
-            # 2. 筛选出正样本候选 依据特征点必须在gt boxes内 或 物体中心的采样范围内
-
-            # 若开启了中心采样策略，则只有距离物体中心点一定半径范围内(x,y方向上均不超过一定距离)的点才是正样本
-            # 这种做法加强了约束，要求正样本位置距离物体中心更近，而非仅仅在gt box内
-            if self.center_sampling_radius > 0:
-                # 其中每项代表特征点j是否在物体i的中心采样区域内
-                # (num_points_all_levels,num_objects_i) bool
-                is_in_boxes = self.get_sample_region(
-                    # (num_objects_i,4) 一张图片中的gt boxes
-                    bboxes,
-                    # [8,16,32,64,128] 各层下采样步长
-                    self.fpn_strides,
-                    # [h_1*w_1, h_2*w_2, ..] 各层特征点数量
-                    self.num_points_per_level,
-                    # (num_points_all_levels,) (num_points_all_levels,)
-                    xs, ys,
-                    # 通常设置为1.5
-                    radius=self.center_sampling_radius
-                )
-            # 否则，只要点位于gt boxes内的特征点均为正样本
-            else:
-                # no center sampling, it will use all the locations within a ground-truth box
-                # (num_points_all_levels,num_objects_i) bool
-                # 其中每项代表特征点j是否在物体i的gt box内 只需要min(l,t,r,b) > 0
-                is_in_boxes = reg_targets_per_im.min(dim=2)[0] > 0
-
-            # 3. 筛选出正样本 依据各层特征负责回归不同尺度的目标物体
-
-            # (num_points_all_levels,num_objects_i) 特征点距离gt box 4条边的最大距离
-            max_reg_targets_per_im = reg_targets_per_im.max(dim=2)[0]
-            # limit the regression range for each location
-            # 特征点距离gt box 4条边的最大距离必须在其所属特征层负责回归的尺度范围内
-            # 其实背后代表的意义就是那一层特征负责预测的目标尺寸(gt boxes边长)必须在一定范围内
-            # (num_points_all_levels,num_objects_i)
-            is_cared_in_the_level = \
-                (max_reg_targets_per_im >= object_sizes_of_interest[:, [0]]) & \
-                (max_reg_targets_per_im <= object_sizes_of_interest[:, [1]])
-
-            # 将每个物体的面积的shape扩展以方便计算 使得每个特征点对应一张图中所有物体面积
-            # (num_points_all_levels,num_objects_i)
-            locations_to_gt_area = area[None].repeat(len(locations), 1)
-            # 将负样本特征点对应的gt boxes面积置为无穷
-            locations_to_gt_area[is_in_boxes == 0] = INF
-            locations_to_gt_area[is_cared_in_the_level == 0] = INF
-
-            # 4. 若一个正样本对应到多个gt，则选择gt box面积最小的去负责预测
-
-            # if there are still more than one objects for a location,
-            # we choose the one with minimal area
-            # 选出每个特征点对应的面积最小的gt box
-            # 最小面积：(num_points_all_levels,） gt索引：(num_points_all_levels,）
-            locations_to_min_area, locations_to_gt_inds = locations_to_gt_area.min(dim=1)
-            
-            # (num_points_all_levels,4) 每个特征点取面积最小的gt box作为回归目标 注意这里包含了负样本
-            reg_targets_per_im = reg_targets_per_im[range(len(locations)), locations_to_gt_inds]
-            # (num_points_all_levels,) 每个特征点对应的类别标签
-            labels_per_im = labels_per_im[locations_to_gt_inds]
-            # 负样本的类别标签设置为背景类
-            labels_per_im[locations_to_min_area == INF] = 0
-
-            labels.append(labels_per_im)
-            reg_targets.append(reg_targets_per_im)
-
-        return labels, reg_targets
-```
-
 ## **归纳**
 
 ![](images/1757410360441.jpeg)
@@ -433,7 +230,7 @@ FCOS 分两步筛选正样本：先在空间维度找候选正样本，再在尺
 
 * **尺度维度（Scale Constraint）：**&#x4E0D;同金字塔层级负责不同大小的目标，只有候选正样本的尺度（对应目标大小的范围）与所在层级的尺度区间匹配时，才被标记为最终正样本（1）；否则为负样本（0）。
 
-![](images/Luban_175724894259911a7ee5e-9d70-4c2f-8564-6105ff086217.png)
+![](images/Luban_1758355063934b22a8863-9f43-4b3c-9525-6463c1e6926e.jpg)
 
 ***
 

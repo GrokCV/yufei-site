@@ -1,3 +1,4 @@
+# 文献梳理1：LESPS
 # **LESPS（单点监督标签进化）**
 
 **论文标题：Mapping Degeneration Meets Label Evolution: Learning Infrared Small Target Detection with Single Point Supervision**

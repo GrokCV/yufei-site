@@ -1,3 +1,4 @@
+# 文献梳理2：MCLC
 # MCLC（蒙特卡洛线性聚类）
 
 **论文标题：Monte Carlo Linear Clustering with Single-Point Supervision is Enough for Infrared Small Target Detection**

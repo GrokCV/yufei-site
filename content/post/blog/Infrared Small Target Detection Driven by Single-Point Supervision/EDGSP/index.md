@@ -1,3 +1,4 @@
+# 文献梳理3：EDGSP
 # EDGSP（**能量双引导单点提示**）
 
 **论文标题：Beyond Full Labels: Energy-Double-Guided Single-Point Prompt for Infrared Small Target Label Generation**
